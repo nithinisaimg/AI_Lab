@@ -33,6 +33,7 @@ export function ControlsPanel({
   datasets: Record<string, DatasetMeta>;
   onUpload: (file: File) => void;
   onRemoveDataset: (id: DatasetId) => void;
+  onApplied?: (rationale: string) => void;
 }) {
   const ds = (datasets && datasets[cfg.dataset]) || DATASETS[cfg.dataset] || DATASETS.student;
   const model = MODELS[cfg.model];
