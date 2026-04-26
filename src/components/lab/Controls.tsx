@@ -24,6 +24,7 @@ export function ControlsPanel({
   datasets,
   onUpload,
   onRemoveDataset,
+  onApplied,
 }: {
   cfg: ConfigState;
   onChange: (next: ConfigState) => void;
