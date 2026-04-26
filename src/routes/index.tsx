@@ -149,6 +149,10 @@ function Lab() {
               datasets={datasets}
               onUpload={handleUpload}
               onRemoveDataset={handleRemoveDataset}
+              onApplied={(rationale) => {
+                setToast({ kind: "ok", msg: rationale });
+                setTimeout(() => setToast(null), 6000);
+              }}
             />
             {toast && (
               <div className={`mt-3 border px-3 py-2 font-mono text-[10px] leading-relaxed ${toast.kind === "ok" ? "border-foreground/60 bg-foreground/5" : "border-foreground/40 bg-foreground/5 text-muted-foreground"}`}>

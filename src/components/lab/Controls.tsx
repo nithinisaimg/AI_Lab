@@ -24,6 +24,7 @@ export function ControlsPanel({
   datasets,
   onUpload,
   onRemoveDataset,
+  onApplied,
 }: {
   cfg: ConfigState;
   onChange: (next: ConfigState) => void;
@@ -33,6 +34,7 @@ export function ControlsPanel({
   datasets: Record<string, DatasetMeta>;
   onUpload: (file: File) => void;
   onRemoveDataset: (id: DatasetId) => void;
+  onApplied?: (rationale: string) => void;
 }) {
   const ds = (datasets && datasets[cfg.dataset]) || DATASETS[cfg.dataset] || DATASETS.student;
   const model = MODELS[cfg.model];
@@ -73,7 +75,7 @@ export function ControlsPanel({
   const applyRecommendation = () => {
     const rec = recommendFor(ds);
     onChange({
-      ...cfg,
+      dataset: cfg.dataset,
       model: rec.model,
       loss: rec.loss,
       capacity: rec.capacity,
@@ -83,6 +85,7 @@ export function ControlsPanel({
       dropout: rec.dropout,
       epochs: rec.epochs,
     });
+    onApplied?.(rec.rationale);
   };
 
   return (
