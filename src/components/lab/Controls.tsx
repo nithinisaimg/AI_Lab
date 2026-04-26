@@ -1,6 +1,7 @@
-import { DATASETS, MODELS, type DatasetId, type LossId, type ModelId, type RegId } from "@/lib/ml-sim";
+import { DATASETS, MODELS, recommendFor, type DatasetId, type DatasetMeta, type LossId, type ModelId, type RegId } from "@/lib/ml-sim";
 import { Field } from "./Panel";
 import { cn } from "@/lib/utils";
+import { useRef } from "react";
 
 interface ConfigState {
   dataset: DatasetId;
@@ -20,15 +21,22 @@ export function ControlsPanel({
   onTrain,
   onSave,
   training,
+  datasets,
+  onUpload,
+  onRemoveDataset,
 }: {
   cfg: ConfigState;
   onChange: (next: ConfigState) => void;
   onTrain: () => void;
   onSave: () => void;
   training: boolean;
+  datasets: Record<string, DatasetMeta>;
+  onUpload: (file: File) => void;
+  onRemoveDataset: (id: DatasetId) => void;
 }) {
-  const ds = DATASETS[cfg.dataset];
+  const ds = datasets[cfg.dataset] ?? DATASETS[cfg.dataset];
   const model = MODELS[cfg.model];
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const lossOptions: { id: LossId; label: string; allowed: boolean }[] = [
     { id: "mse", label: "MSE", allowed: ds.task === "regression" },
@@ -44,14 +52,36 @@ export function ControlsPanel({
   };
 
   const setDataset = (id: DatasetId) => {
-    const newDs = DATASETS[id];
-    const m = MODELS[cfg.model];
-    const supported = newDs.task === "regression" ? m.supports.regression : m.supports.binary;
+    const newDs = datasets[id];
+    if (!newDs) return;
+    // Auto-apply recommended config for the new dataset
+    const rec = recommendFor(newDs);
     onChange({
       ...cfg,
       dataset: id,
-      model: supported ? cfg.model : (newDs.task === "regression" ? "linear" : "logistic"),
-      loss: newDs.task === "regression" ? "mse" : "bce",
+      model: rec.model,
+      loss: rec.loss,
+      capacity: rec.capacity,
+      layers: rec.layers,
+      regularization: rec.regularization,
+      regStrength: rec.regStrength,
+      dropout: rec.dropout,
+      epochs: rec.epochs,
+    });
+  };
+
+  const applyRecommendation = () => {
+    const rec = recommendFor(ds);
+    onChange({
+      ...cfg,
+      model: rec.model,
+      loss: rec.loss,
+      capacity: rec.capacity,
+      layers: rec.layers,
+      regularization: rec.regularization,
+      regStrength: rec.regStrength,
+      dropout: rec.dropout,
+      epochs: rec.epochs,
     });
   };
 
@@ -60,29 +90,73 @@ export function ControlsPanel({
       {/* Dataset */}
       <Field label="Dataset · Source">
         <div className="grid grid-cols-1 gap-1.5">
-          {(Object.keys(DATASETS) as DatasetId[]).map((id) => {
-            const d = DATASETS[id];
+          {(Object.keys(datasets) as DatasetId[]).map((id) => {
+            const d = datasets[id];
             const active = cfg.dataset === id;
             return (
-              <button
-                key={id}
-                onClick={() => setDataset(id)}
-                className={cn(
-                  "group text-left border border-panel-border px-3 py-2 transition-colors font-mono",
-                  active ? "bg-foreground text-background border-foreground" : "hover:border-foreground/60"
+              <div key={id} className="relative group">
+                <button
+                  onClick={() => setDataset(id)}
+                  className={cn(
+                    "w-full text-left border border-panel-border px-3 py-2 transition-colors font-mono",
+                    active ? "bg-foreground text-background border-foreground" : "hover:border-foreground/60"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs tracking-wider truncate">{d.name}</span>
+                    <span className="text-[9px] uppercase tracking-widest opacity-70 shrink-0">
+                      {d.uploaded ? "★ " : ""}{d.task}
+                    </span>
+                  </div>
+                  <div className={cn("text-[10px] mt-0.5", active ? "text-background/70" : "text-muted-foreground")}>
+                    n={d.samples} · features={d.features} · y={d.targetName}
+                  </div>
+                </button>
+                {d.uploaded && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onRemoveDataset(id); }}
+                    className={cn(
+                      "absolute top-1 right-1 h-4 w-4 grid place-items-center font-mono text-[10px] leading-none border opacity-0 group-hover:opacity-100 transition-opacity",
+                      active ? "border-background/40 text-background hover:bg-background/20" : "border-panel-border text-muted-foreground hover:text-foreground hover:border-foreground/60"
+                    )}
+                    aria-label="Remove dataset"
+                  >
+                    ×
+                  </button>
                 )}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs tracking-wider">{d.name}</span>
-                  <span className="text-[9px] uppercase tracking-widest opacity-70">{d.task}</span>
-                </div>
-                <div className={cn("text-[10px] mt-0.5", active ? "text-background/70" : "text-muted-foreground")}>
-                  n={d.samples} · features={d.features}
-                </div>
-              </button>
+              </div>
             );
           })}
         </div>
+
+        {/* Upload */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onUpload(f);
+            e.target.value = "";
+          }}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="w-full mt-2 border border-dashed border-panel-border hover:border-foreground/60 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center gap-2"
+        >
+          <span className="text-foreground">＋</span> Upload CSV Dataset
+        </button>
+        <div className="font-mono text-[9px] text-muted-foreground/70 mt-1 leading-relaxed">
+          // Last column = target. Task auto-detected. Recommended model, loss, regularization &amp; epochs are auto-applied.
+        </div>
+
+        <button
+          onClick={applyRecommendation}
+          className="w-full mt-2 border border-panel-border hover:border-foreground/60 hover:bg-foreground/5 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground hover:text-foreground transition-colors"
+        >
+          ⟳ Apply recommended for «{ds.name}»
+        </button>
       </Field>
 
       {/* Model */}
