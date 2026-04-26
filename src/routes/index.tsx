@@ -140,7 +140,22 @@ function Lab() {
         {/* LEFT — Controls */}
         <aside className="space-y-4">
           <Panel title="Control Bay" subtitle="parameters">
-            <ControlsPanel cfg={cfg} onChange={setCfg} onTrain={handleTrain} onSave={handleSave} training={training} />
+            <ControlsPanel
+              cfg={cfg}
+              onChange={setCfg}
+              onTrain={handleTrain}
+              onSave={handleSave}
+              training={training}
+              datasets={datasets}
+              onUpload={handleUpload}
+              onRemoveDataset={handleRemoveDataset}
+            />
+            {toast && (
+              <div className={`mt-3 border px-3 py-2 font-mono text-[10px] leading-relaxed ${toast.kind === "ok" ? "border-foreground/60 bg-foreground/5" : "border-foreground/40 bg-foreground/5 text-muted-foreground"}`}>
+                <span className="uppercase tracking-[0.2em] text-foreground">{toast.kind === "ok" ? "// dataset loaded" : "// upload error"}</span>
+                <div className="mt-1">{toast.msg}</div>
+              </div>
+            )}
           </Panel>
         </aside>
 
