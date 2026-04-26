@@ -80,8 +80,15 @@ function Lab() {
     });
     if (cfg.dataset === id) {
       const fallback = DATASETS.student;
-      const rec = recommendFor(fallback);
-      setCfg({ ...cfg, dataset: fallback.id, model: rec.model, loss: rec.loss, capacity: rec.capacity, layers: rec.layers, regularization: rec.regularization, regStrength: rec.regStrength, dropout: rec.dropout, epochs: rec.epochs });
+      const m = MODELS[cfg.model];
+      const supported = fallback.task === "regression" ? m.supports.regression : m.supports.binary;
+      const lossOk = fallback.task === "regression" ? cfg.loss === "mse" : cfg.loss === "bce";
+      setCfg({
+        ...cfg,
+        dataset: fallback.id,
+        model: supported ? cfg.model : "linear",
+        loss: lossOk ? cfg.loss : "mse",
+      });
       setMetrics(null);
     }
   };
