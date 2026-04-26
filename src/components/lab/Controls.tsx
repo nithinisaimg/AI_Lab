@@ -34,7 +34,7 @@ export function ControlsPanel({
   onUpload: (file: File) => void;
   onRemoveDataset: (id: DatasetId) => void;
 }) {
-  const ds = datasets[cfg.dataset] ?? DATASETS[cfg.dataset];
+  const ds = (datasets && datasets[cfg.dataset]) || DATASETS[cfg.dataset] || DATASETS.student;
   const model = MODELS[cfg.model];
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -90,7 +90,7 @@ export function ControlsPanel({
       {/* Dataset */}
       <Field label="Dataset · Source">
         <div className="grid grid-cols-1 gap-1.5">
-          {(Object.keys(datasets) as DatasetId[]).map((id) => {
+          {(Object.keys(datasets ?? DATASETS) as DatasetId[]).map((id) => {
             const d = datasets[id];
             const active = cfg.dataset === id;
             return (
