@@ -51,24 +51,25 @@ function Lab() {
       const text = await file.text();
       const parsed = parseUploadedCSV(file.name, text);
       setDatasets((prev) => ({ ...prev, [parsed.meta.id]: parsed.meta }));
-      const rec = recommendFor(parsed.meta);
-      setCfg({
-        dataset: parsed.meta.id,
-        model: rec.model,
-        loss: rec.loss,
-        capacity: rec.capacity,
-        layers: rec.layers,
-        regularization: rec.regularization,
-        regStrength: rec.regStrength,
-        dropout: rec.dropout,
-        epochs: rec.epochs,
+      // Switch dataset only — keep current settings, fixing only loss/model
+      // if they're incompatible with the new task type.
+      setCfg((prev) => {
+        const m = MODELS[prev.model];
+        const supported = parsed.meta.task === "regression" ? m.supports.regression : m.supports.binary;
+        const lossOk = parsed.meta.task === "regression" ? prev.loss === "mse" : prev.loss === "bce";
+        return {
+          ...prev,
+          dataset: parsed.meta.id,
+          model: supported ? prev.model : (parsed.meta.task === "regression" ? "linear" : "logistic"),
+          loss: lossOk ? prev.loss : (parsed.meta.task === "regression" ? "mse" : "bce"),
+        };
       });
       setMetrics(null);
-      setToast({ kind: "ok", msg: `Loaded "${parsed.meta.name}" (${parsed.meta.samples} rows). ${rec.rationale}` });
+      setToast({ kind: "ok", msg: `Loaded "${parsed.meta.name}" (${parsed.meta.samples} rows, ${parsed.meta.features} features, target="${parsed.meta.targetName}"). Press ⟳ Apply recommended to use suggested settings.` });
     } catch (err) {
       setToast({ kind: "err", msg: (err as Error).message || "Failed to parse CSV." });
     }
-    setTimeout(() => setToast(null), 6000);
+    setTimeout(() => setToast(null), 7000);
   };
 
   const handleRemoveDataset = (id: DatasetId) => {
