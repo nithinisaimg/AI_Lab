@@ -34,7 +34,7 @@ export function ControlsPanel({
   onUpload: (file: File) => void;
   onRemoveDataset: (id: DatasetId) => void;
 }) {
-  const ds = datasets[cfg.dataset] ?? DATASETS[cfg.dataset];
+  const ds = (datasets && datasets[cfg.dataset]) || DATASETS[cfg.dataset] || DATASETS.student;
   const model = MODELS[cfg.model];
   const fileInputRef = useRef<HTMLInputElement>(null);
 
