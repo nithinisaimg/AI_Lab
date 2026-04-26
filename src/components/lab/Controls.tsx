@@ -90,7 +90,7 @@ export function ControlsPanel({
       {/* Dataset */}
       <Field label="Dataset · Source">
         <div className="grid grid-cols-1 gap-1.5">
-          {(Object.keys(datasets) as DatasetId[]).map((id) => {
+          {(Object.keys(datasets ?? DATASETS) as DatasetId[]).map((id) => {
             const d = datasets[id];
             const active = cfg.dataset === id;
             return (
