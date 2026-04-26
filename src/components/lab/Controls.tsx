@@ -56,19 +56,17 @@ export function ControlsPanel({
   const setDataset = (id: DatasetId) => {
     const newDs = datasets[id];
     if (!newDs) return;
-    // Auto-apply recommended config for the new dataset
-    const rec = recommendFor(newDs);
+    // Only switch the dataset. Keep all other settings unchanged.
+    // If the current model/loss is incompatible with the new task, fix only that.
+    const currentModel = MODELS[cfg.model];
+    const supported = newDs.task === "regression" ? currentModel.supports.regression : currentModel.supports.binary;
+    const compatibleLoss = newDs.task === "regression" ? cfg.loss === "mse" : cfg.loss === "bce";
+
     onChange({
       ...cfg,
       dataset: id,
-      model: rec.model,
-      loss: rec.loss,
-      capacity: rec.capacity,
-      layers: rec.layers,
-      regularization: rec.regularization,
-      regStrength: rec.regStrength,
-      dropout: rec.dropout,
-      epochs: rec.epochs,
+      model: supported ? cfg.model : (newDs.task === "regression" ? "linear" : "logistic"),
+      loss: compatibleLoss ? cfg.loss : (newDs.task === "regression" ? "mse" : "bce"),
     });
   };
 
