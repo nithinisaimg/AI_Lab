@@ -271,31 +271,54 @@ export function recommendFor(meta: DatasetMeta): Recommendation {
   const isBinary = meta.task === "binary";
   const big = meta.samples > 1000;
   const wide = meta.features > 20;
+  const small = meta.samples < 500;
 
-  // Pick a model: prefer Random Forest as a strong default, NN for big+wide
-  const model: ModelId = big && wide ? "nn" : "forest";
+  // Pick a model that genuinely fits the dataset profile.
+  // - Wide + many samples → Neural Network
+  // - Wide binary classification → Random Forest (robust on tabular)
+  // - Small regression → Linear Regression (low variance)
+  // - Small binary → Logistic Regression
+  // - Otherwise → Decision Tree / Forest
+  let model: ModelId;
+  if (big && wide) model = "nn";
+  else if (wide) model = "forest";
+  else if (small && isBinary) model = "logistic";
+  else if (small && !isBinary) model = "linear";
+  else model = "tree";
+
   const m = MODELS[model];
 
-  // Capacity defaults — moderate to avoid overfitting on small data
-  const capacity = model === "forest" ? Math.min(100, Math.max(30, Math.round(meta.samples / 10)))
-    : model === "nn" ? Math.min(64, Math.max(16, Math.round(meta.features * 2)))
-    : m.capacityDefault;
+  const capacity =
+    model === "forest" ? Math.min(120, Math.max(40, Math.round(meta.samples / 8))) :
+    model === "nn" ? Math.min(64, Math.max(16, Math.round(meta.features * 2))) :
+    model === "tree" ? Math.min(8, Math.max(4, Math.round(Math.log2(meta.samples)))) :
+    model === "linear" ? 2 :
+    model === "logistic" ? 2 :
+    m.capacityDefault;
 
   const layers = model === "nn" ? (big ? 3 : 2) : 1;
 
   const loss: LossId = isBinary ? "bce" : "mse";
 
-  // Small data → stronger regularization
-  const regularization: RegId = model === "nn" ? "dropout" : (meta.samples < 500 ? "l2" : "l1");
-  const regStrength = meta.samples < 500 ? 0.3 : 0.1;
-  const dropout = meta.samples < 500 ? 0.4 : 0.25;
+  // Pick regularization based on model + size
+  let regularization: RegId;
+  if (model === "nn") regularization = "dropout";
+  else if (model === "tree" || model === "forest") regularization = "none";
+  else regularization = small ? "l2" : "elastic";
 
-  const epochs = model === "nn" ? (big ? 120 : 80) : 60;
+  const regStrength = small ? 0.3 : 0.15;
+  const dropout = small ? 0.4 : 0.25;
+
+  const epochs =
+    model === "nn" ? (big ? 120 : 80) :
+    model === "forest" ? 50 :
+    model === "tree" ? 40 :
+    60;
 
   const rationale =
-    `${m.name} recommended for a ${meta.task} task with ${meta.samples} samples and ${meta.features} features. ` +
-    `Loss set to ${loss.toUpperCase()}. ` +
-    `${meta.samples < 500 ? "Small dataset — stronger regularization applied to prevent overfitting." : "Moderate regularization applied for balanced generalization."}`;
+    `${m.name} → best fit for ${meta.task} with ${meta.samples} samples, ${meta.features} features. ` +
+    `Loss=${loss.toUpperCase()}, regularization=${regularization === "none" ? "none (tree-based)" : regularization.toUpperCase()}, epochs=${epochs}. ` +
+    `${small ? "Small dataset → simpler model + stronger regularization." : big ? "Large dataset → higher-capacity model." : "Balanced configuration."}`;
 
   return { model, loss, regularization, regStrength, dropout, epochs, capacity, layers, rationale };
 }
