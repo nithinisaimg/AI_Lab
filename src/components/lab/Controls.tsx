@@ -73,7 +73,7 @@ export function ControlsPanel({
   const applyRecommendation = () => {
     const rec = recommendFor(ds);
     onChange({
-      ...cfg,
+      dataset: cfg.dataset,
       model: rec.model,
       loss: rec.loss,
       capacity: rec.capacity,
@@ -83,6 +83,7 @@ export function ControlsPanel({
       dropout: rec.dropout,
       epochs: rec.epochs,
     });
+    onApplied?.(rec.rationale);
   };
 
   return (
