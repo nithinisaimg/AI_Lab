@@ -184,3 +184,118 @@ export function simulate(cfg: RunConfig): Metrics {
 
   return { trainAcc, testAcc, precision, recall, f1, confusion, trainLoss, testLoss, trainCurve, testCurve, verdict, insight };
 }
+
+// =====================================================================
+// Dataset upload + recommendation engine
+// =====================================================================
+
+export interface ParsedDataset {
+  meta: DatasetMeta;
+  headers: string[];
+  preview: string[][]; // first ~5 rows
+}
+
+function parseCSV(text: string): { headers: string[]; rows: string[][] } {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return { headers: [], rows: [] };
+
+  // simple CSV splitter — supports quoted fields with commas
+  const split = (line: string): string[] => {
+    const out: string[] = [];
+    let cur = "";
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"' ) { inQ = !inQ; continue; }
+      if (ch === "," && !inQ) { out.push(cur); cur = ""; continue; }
+      cur += ch;
+    }
+    out.push(cur);
+    return out.map((s) => s.trim());
+  };
+
+  const headers = split(lines[0]);
+  const rows = lines.slice(1).map(split);
+  return { headers, rows };
+}
+
+function inferTask(targetValues: string[]): "regression" | "binary" {
+  const unique = new Set(targetValues.map((v) => v.toLowerCase()));
+  if (unique.size <= 2) return "binary";
+  // numeric with many distinct values → regression
+  const nums = targetValues.map(Number).filter((n) => !Number.isNaN(n));
+  if (nums.length / Math.max(1, targetValues.length) > 0.8 && unique.size > 10) return "regression";
+  return unique.size <= 5 ? "binary" : "regression";
+}
+
+export function parseUploadedCSV(filename: string, text: string): ParsedDataset {
+  const { headers, rows } = parseCSV(text);
+  if (headers.length < 2 || rows.length === 0) {
+    throw new Error("Dataset must have a header row and at least one data row.");
+  }
+  const targetName = headers[headers.length - 1];
+  const targetValues = rows.map((r) => r[headers.length - 1] ?? "").filter(Boolean);
+  const task = inferTask(targetValues);
+
+  const id = `upload:${Date.now()}`;
+  const cleanName = filename.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
+
+  const meta: DatasetMeta = {
+    id,
+    name: cleanName || "Uploaded Dataset",
+    task,
+    samples: rows.length,
+    features: headers.length - 1,
+    targetName,
+    description: `User-uploaded dataset. Target column "${targetName}" detected as ${task} task.`,
+    uploaded: true,
+  };
+
+  return { meta, headers, preview: rows.slice(0, 5) };
+}
+
+// Recommended config based on dataset task + size
+export interface Recommendation {
+  model: ModelId;
+  loss: LossId;
+  regularization: RegId;
+  regStrength: number;
+  dropout: number;
+  epochs: number;
+  capacity: number;
+  layers: number;
+  rationale: string;
+}
+
+export function recommendFor(meta: DatasetMeta): Recommendation {
+  const isBinary = meta.task === "binary";
+  const big = meta.samples > 1000;
+  const wide = meta.features > 20;
+
+  // Pick a model: prefer Random Forest as a strong default, NN for big+wide
+  const model: ModelId = big && wide ? "nn" : "forest";
+  const m = MODELS[model];
+
+  // Capacity defaults — moderate to avoid overfitting on small data
+  const capacity = model === "forest" ? Math.min(100, Math.max(30, Math.round(meta.samples / 10)))
+    : model === "nn" ? Math.min(64, Math.max(16, Math.round(meta.features * 2)))
+    : m.capacityDefault;
+
+  const layers = model === "nn" ? (big ? 3 : 2) : 1;
+
+  const loss: LossId = isBinary ? "bce" : "mse";
+
+  // Small data → stronger regularization
+  const regularization: RegId = model === "nn" ? "dropout" : (meta.samples < 500 ? "l2" : "l1");
+  const regStrength = meta.samples < 500 ? 0.3 : 0.1;
+  const dropout = meta.samples < 500 ? 0.4 : 0.25;
+
+  const epochs = model === "nn" ? (big ? 120 : 80) : 60;
+
+  const rationale =
+    `${m.name} recommended for a ${meta.task} task with ${meta.samples} samples and ${meta.features} features. ` +
+    `Loss set to ${loss.toUpperCase()}. ` +
+    `${meta.samples < 500 ? "Small dataset — stronger regularization applied to prevent overfitting." : "Moderate regularization applied for balanced generalization."}`;
+
+  return { model, loss, regularization, regStrength, dropout, epochs, capacity, layers, rationale };
+}
