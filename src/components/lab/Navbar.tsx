@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 
 export function Navbar({ status }: { status: "idle" | "training" | "ready" }) {
-  const [time, setTime] = useState(() => new Date());
+  const [time, setTime] = useState<string>("");
   useEffect(() => {
-    const id = setInterval(() => setTime(new Date()), 1000);
+    const update = () => setTime(new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC");
+    update();
+    const id = setInterval(update, 1000);
     return () => clearInterval(id);
   }, []);
 
