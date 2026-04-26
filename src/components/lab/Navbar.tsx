@@ -34,8 +34,8 @@ export function Navbar({ status }: { status: "idle" | "training" | "ready" }) {
         </nav>
 
         <div className="flex items-center gap-4">
-          <div className="hidden sm:block font-mono text-[11px] text-muted-foreground tabular-nums">
-            {time.toISOString().replace("T", " ").slice(0, 19)} UTC
+          <div className="hidden sm:block font-mono text-[11px] text-muted-foreground tabular-nums min-w-[180px]" suppressHydrationWarning>
+            {time || "----.--.-- --:--:-- UTC"}
           </div>
           <div className="flex items-center gap-2 border border-panel-border px-2.5 py-1">
             <span className="relative inline-flex h-2 w-2">
