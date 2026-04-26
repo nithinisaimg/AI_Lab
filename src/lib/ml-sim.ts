@@ -1,7 +1,7 @@
 // Lightweight ML "simulator" — produces realistic-looking metrics & curves
 // based on capacity and regularization, illustrating under/over-fitting.
 
-export type DatasetId = "student" | "breast-cancer";
+export type DatasetId = string;
 export type ModelId = "linear" | "logistic" | "tree" | "forest" | "nn";
 export type LossId = "mse" | "bce" | "cce";
 export type RegId = "none" | "l1" | "l2" | "elastic" | "dropout";
@@ -14,6 +14,7 @@ export interface DatasetMeta {
   features: number;
   targetName: string;
   description: string;
+  uploaded?: boolean;
 }
 
 export const DATASETS: Record<DatasetId, DatasetMeta> = {
