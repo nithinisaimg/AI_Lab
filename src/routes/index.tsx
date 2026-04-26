@@ -7,7 +7,7 @@ import { LineChart, ConfusionMatrix } from "@/components/lab/Charts";
 import { MetricCard } from "@/components/lab/MetricCard";
 import { InsightsPanel } from "@/components/lab/Insights";
 import { ComparisonBar, type SavedExperiment } from "@/components/lab/ComparisonBar";
-import { DATASETS, MODELS, simulate, type Metrics } from "@/lib/ml-sim";
+import { DATASETS, MODELS, simulate, parseUploadedCSV, recommendFor, type DatasetMeta, type Metrics, type DatasetId } from "@/lib/ml-sim";
 
 export const Route = createFileRoute("/")({
   head: () => ({
