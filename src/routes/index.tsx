@@ -106,11 +106,12 @@ function Lab() {
         {/* CENTER — Outputs */}
         <section className="space-y-4 min-w-0">
           <Panel title="Performance Telemetry" subtitle="train · test">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
               <MetricCard label={ds.task === "binary" ? "Train Acc" : "Train R²"} value={metrics ? (metrics.trainAcc * 100).toFixed(1) : "—"} suffix={metrics ? "%" : ""} />
               <MetricCard label={ds.task === "binary" ? "Test Acc" : "Test R²"} value={metrics ? (metrics.testAcc * 100).toFixed(1) : "—"} suffix={metrics ? "%" : ""} />
               <MetricCard label="Precision" value={metrics ? metrics.precision.toFixed(3) : "—"} />
-              <MetricCard label="Recall / F1" value={metrics ? `${metrics.recall.toFixed(2)}/${metrics.f1.toFixed(2)}` : "—"} />
+              <MetricCard label="Recall" value={metrics ? metrics.recall.toFixed(3) : "—"} />
+              <MetricCard label="F1 Score" value={metrics ? metrics.f1.toFixed(3) : "—"} />
             </div>
             <div className="scanline border border-panel-border p-2 bg-background/40">
               {metrics ? (
