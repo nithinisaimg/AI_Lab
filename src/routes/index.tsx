@@ -35,14 +35,55 @@ const DEFAULT_CFG: ConfigState = {
 
 function Lab() {
   const [cfg, setCfg] = useState<ConfigState>(DEFAULT_CFG);
+  const [datasets, setDatasets] = useState<Record<string, DatasetMeta>>(DATASETS);
   const [training, setTraining] = useState(false);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [saved, setSaved] = useState<SavedExperiment[]>([]);
   const [progress, setProgress] = useState(0);
+  const [toast, setToast] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
 
-  const ds = DATASETS[cfg.dataset];
+  const ds = datasets[cfg.dataset] ?? DATASETS[cfg.dataset];
   const model = MODELS[cfg.model];
   const status: "idle" | "training" | "ready" = training ? "training" : metrics ? "ready" : "idle";
+
+  const handleUpload = async (file: File) => {
+    try {
+      const text = await file.text();
+      const parsed = parseUploadedCSV(file.name, text);
+      setDatasets((prev) => ({ ...prev, [parsed.meta.id]: parsed.meta }));
+      const rec = recommendFor(parsed.meta);
+      setCfg({
+        dataset: parsed.meta.id,
+        model: rec.model,
+        loss: rec.loss,
+        capacity: rec.capacity,
+        layers: rec.layers,
+        regularization: rec.regularization,
+        regStrength: rec.regStrength,
+        dropout: rec.dropout,
+        epochs: rec.epochs,
+      });
+      setMetrics(null);
+      setToast({ kind: "ok", msg: `Loaded "${parsed.meta.name}" (${parsed.meta.samples} rows). ${rec.rationale}` });
+    } catch (err) {
+      setToast({ kind: "err", msg: (err as Error).message || "Failed to parse CSV." });
+    }
+    setTimeout(() => setToast(null), 6000);
+  };
+
+  const handleRemoveDataset = (id: DatasetId) => {
+    setDatasets((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    if (cfg.dataset === id) {
+      const fallback = DATASETS.student;
+      const rec = recommendFor(fallback);
+      setCfg({ ...cfg, dataset: fallback.id, model: rec.model, loss: rec.loss, capacity: rec.capacity, layers: rec.layers, regularization: rec.regularization, regStrength: rec.regStrength, dropout: rec.dropout, epochs: rec.epochs });
+      setMetrics(null);
+    }
+  };
 
   const handleTrain = () => {
     setTraining(true);
