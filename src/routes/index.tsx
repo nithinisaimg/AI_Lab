@@ -7,7 +7,7 @@ import { LineChart, ConfusionMatrix } from "@/components/lab/Charts";
 import { MetricCard } from "@/components/lab/MetricCard";
 import { InsightsPanel } from "@/components/lab/Insights";
 import { ComparisonBar, type SavedExperiment } from "@/components/lab/ComparisonBar";
-import { DATASETS, MODELS, simulate, parseUploadedCSV, recommendFor, type DatasetMeta, type Metrics, type DatasetId } from "@/lib/ml-sim";
+import { DATASETS, MODELS, simulate, parseUploadedCSV, recommendFor, inferTask, type DatasetMeta, type Metrics, type DatasetId } from "@/lib/ml-sim";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -50,7 +50,14 @@ function Lab() {
     try {
       const text = await file.text();
       const parsed = parseUploadedCSV(file.name, text);
-      setDatasets((prev) => ({ ...prev, [parsed.meta.id]: parsed.meta }));
+      setDatasets((prev) => ({
+        ...prev,
+        [parsed.meta.id]: {
+          ...parsed.meta,
+          headers: parsed.headers,
+          rows: parsed.rows,
+        },
+      }));
       // Switch dataset only — keep current settings, fixing only loss/model
       // if they're incompatible with the new task type.
       setCfg((prev) => {
@@ -93,17 +100,52 @@ function Lab() {
     }
   };
 
+  const handleSetTarget = (datasetId: DatasetId, targetName: string) => {
+    const ds = datasets[datasetId];
+    if (!ds?.headers) return;
+    const targetIndex = ds.headers.indexOf(targetName);
+    if (targetIndex < 0) return;
+
+    const sampleRows = ds.rows && ds.rows.length ? ds.rows : [];
+    const targetValues = sampleRows.map((row) => row[targetIndex] ?? "").filter(Boolean);
+    const task = inferTask(targetValues.length ? targetValues : [targetName]);
+
+    setDatasets((prev) => ({
+      ...prev,
+      [datasetId]: {
+        ...ds,
+        targetName,
+        task,
+        description: `User-uploaded dataset. Sampled up to ${ds.samples} rows for fast profiling. Target column "${targetName}" detected as ${task} task.`,
+      },
+    }));
+
+    if (datasetId === cfg.dataset) {
+      const currentModel = MODELS[cfg.model];
+      const supported = task === "regression" ? currentModel.supports.regression : currentModel.supports.binary;
+      const lossOk = task === "regression" ? cfg.loss === "mse" : cfg.loss === "bce";
+      setCfg({
+        ...cfg,
+        model: supported ? cfg.model : (task === "regression" ? "linear" : "logistic"),
+        loss: lossOk ? cfg.loss : (task === "regression" ? "mse" : "bce"),
+      });
+      setMetrics(null);
+    }
+  };
+
   const handleTrain = () => {
     setTraining(true);
     setProgress(0);
     const total = 900;
+    // Capture current dataset meta so uploaded datasets work reliably during simulation.
+    const dsMeta = datasets[cfg.dataset] ?? DATASETS[cfg.dataset];
     const start = Date.now();
     const tick = () => {
       const p = Math.min(1, (Date.now() - start) / total);
       setProgress(p);
       if (p < 1) requestAnimationFrame(tick);
       else {
-        setMetrics(simulate(cfg));
+        setMetrics(simulate(cfg, dsMeta));
         setTraining(false);
       }
     };
@@ -113,7 +155,8 @@ function Lab() {
   const handleSave = () => {
     if (!metrics) return;
     if (saved.length >= 3) return;
-    setSaved((s) => [...s, { id: crypto.randomUUID(), cfg: { ...cfg }, metrics }]);
+    const dsMeta = datasets[cfg.dataset] ?? DATASETS[cfg.dataset];
+    setSaved((s) => [...s, { id: crypto.randomUUID(), cfg: { ...cfg }, metrics, dataset: dsMeta }]);
   };
 
   const sweep = useMemo(() => {
@@ -157,6 +200,7 @@ function Lab() {
               datasets={datasets}
               onUpload={handleUpload}
               onRemoveDataset={handleRemoveDataset}
+              onChangeTarget={handleSetTarget}
               onApplied={(rationale) => {
                 setToast({ kind: "ok", msg: rationale });
                 setTimeout(() => setToast(null), 6000);

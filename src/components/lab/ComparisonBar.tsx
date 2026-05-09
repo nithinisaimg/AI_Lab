@@ -1,4 +1,4 @@
-import type { Metrics } from "@/lib/ml-sim";
+import type { Metrics, DatasetMeta } from "@/lib/ml-sim";
 import type { ConfigState } from "./Controls";
 import { MODELS, DATASETS } from "@/lib/ml-sim";
 
@@ -6,6 +6,7 @@ export interface SavedExperiment {
   id: string;
   cfg: ConfigState;
   metrics: Metrics;
+  dataset: DatasetMeta;
 }
 
 export function ComparisonBar({ saved, onClear, onRemove }: { saved: SavedExperiment[]; onClear: () => void; onRemove: (id: string) => void }) {
@@ -32,7 +33,7 @@ export function ComparisonBar({ saved, onClear, onRemove }: { saved: SavedExperi
                 <button onClick={() => onRemove(s.id)} className="font-mono text-[10px] text-muted-foreground hover:text-foreground">×</button>
               </div>
               <div className="font-mono text-xs">{MODELS[s.cfg.model].name}</div>
-              <div className="font-mono text-[10px] text-muted-foreground mb-2">{DATASETS[s.cfg.dataset].name}</div>
+              <div className="font-mono text-[10px] text-muted-foreground mb-2">{s.dataset?.name ?? DATASETS[s.cfg.dataset]?.name ?? "Unknown dataset"}</div>
               <div className="grid grid-cols-2 gap-2">
                 <Mini label="Train" value={(s.metrics.trainAcc * 100).toFixed(1) + "%"} />
                 <Mini label="Test" value={(s.metrics.testAcc * 100).toFixed(1) + "%"} />

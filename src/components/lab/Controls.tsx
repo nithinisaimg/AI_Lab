@@ -2,6 +2,7 @@ import { DATASETS, MODELS, recommendFor, type DatasetId, type DatasetMeta, type 
 import { Field } from "./Panel";
 import { cn } from "@/lib/utils";
 import { useRef } from "react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface ConfigState {
   dataset: DatasetId;
@@ -24,6 +25,7 @@ export function ControlsPanel({
   datasets,
   onUpload,
   onRemoveDataset,
+  onChangeTarget,
   onApplied,
 }: {
   cfg: ConfigState;
@@ -34,6 +36,7 @@ export function ControlsPanel({
   datasets: Record<string, DatasetMeta>;
   onUpload: (file: File) => void;
   onRemoveDataset: (id: DatasetId) => void;
+  onChangeTarget: (datasetId: DatasetId, targetName: string) => void;
   onApplied?: (rationale: string) => void;
 }) {
   const ds = (datasets && datasets[cfg.dataset]) || DATASETS[cfg.dataset] || DATASETS.student;
@@ -148,8 +151,29 @@ export function ControlsPanel({
         >
           <span className="text-foreground">＋</span> Upload CSV Dataset
         </button>
-        <div className="font-mono text-[9px] text-muted-foreground/70 mt-1 leading-relaxed">
-          // Last column = target. Task auto-detected. Recommended model, loss, regularization &amp; epochs are auto-applied.
+
+        {ds.uploaded && ds.headers && ds.headers.length > 1 && (
+          <Field label="Target · Y">
+            <Select value={ds.targetName} onValueChange={(value) => onChangeTarget(cfg.dataset, value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select target column" />
+              </SelectTrigger>
+              <SelectContent>
+                {ds.headers.map((header) => (
+                  <SelectItem key={header} value={header}>
+                    {header}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="text-[9px] mt-1 text-muted-foreground">
+              Choose the column to treat as the target variable for training.
+            </div>
+          </Field>
+        )}
+
+        <div className="font-mono text-[9px] text-muted-foreground/70 mt-2 leading-relaxed">
+          // Uploaded datasets let you select the target column manually before applying recommended settings.
         </div>
 
         <button

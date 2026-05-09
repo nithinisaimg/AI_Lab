@@ -15,6 +15,8 @@ export interface DatasetMeta {
   targetName: string;
   description: string;
   uploaded?: boolean;
+  headers?: string[];
+  rows?: string[][];
 }
 
 export const DATASETS: Record<DatasetId, DatasetMeta> = {
@@ -88,8 +90,11 @@ export interface Metrics {
 function clamp(x: number, lo = 0, hi = 1) { return Math.max(lo, Math.min(hi, x)); }
 
 // Heuristic: capacity vs ideal. Too low → underfit. Too high w/ low reg → overfit.
-export function simulate(cfg: RunConfig): Metrics {
-  const ds = DATASETS[cfg.dataset];
+export function simulate(cfg: RunConfig, dsOverride?: DatasetMeta): Metrics {
+  // Uploaded datasets live in UI state; simulation needs the matching meta.
+  // Fallback to built-ins to avoid runtime crashes.
+  let ds = dsOverride ?? DATASETS[cfg.dataset];
+  if (!ds) ds = DATASETS.student;
   const m = MODELS[cfg.model];
   // Normalize capacity 0..1
   const capN = (cfg.capacity - m.capacityMin) / (m.capacityMax - m.capacityMin);
@@ -192,6 +197,7 @@ export function simulate(cfg: RunConfig): Metrics {
 export interface ParsedDataset {
   meta: DatasetMeta;
   headers: string[];
+  rows: string[][];
   preview: string[][]; // first ~5 rows
 }
 
@@ -219,7 +225,7 @@ function parseCSV(text: string): { headers: string[]; rows: string[][] } {
   return { headers, rows };
 }
 
-function inferTask(targetValues: string[]): "regression" | "binary" {
+export function inferTask(targetValues: string[]): "regression" | "binary" {
   const unique = new Set(targetValues.map((v) => v.toLowerCase()));
   if (unique.size <= 2) return "binary";
   // numeric with many distinct values → regression
@@ -228,14 +234,95 @@ function inferTask(targetValues: string[]): "regression" | "binary" {
   return unique.size <= 5 ? "binary" : "regression";
 }
 
-export function parseUploadedCSV(filename: string, text: string): ParsedDataset {
-  const { headers, rows } = parseCSV(text);
-  if (headers.length < 2 || rows.length === 0) {
+export function parseUploadedCSV(
+  filename: string,
+  text: string,
+  opts?: { maxRowsForMeta?: number; maxRowsForInference?: number; previewRows?: number }
+): ParsedDataset {
+  const maxRowsForMeta = opts?.maxRowsForMeta ?? 5000;
+  const maxRowsForInference = opts?.maxRowsForInference ?? 2000;
+  const previewRows = opts?.previewRows ?? 5;
+
+  // Parse only what we need for fast task detection and a tiny preview.
+  // This prevents large CSVs from freezing the UI.
+  const split = (line: string): string[] => {
+    const out: string[] = [];
+    let cur = "";
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { inQ = !inQ; continue; }
+      if (ch === "," && !inQ) { out.push(cur); cur = ""; continue; }
+      cur += ch;
+    }
+    out.push(cur);
+    return out.map((s) => s.trim());
+  };
+
+  let headerLine: string | null = null;
+  let dataLinesProcessed = 0;
+  let inferLinesProcessed = 0;
+  let samplesForMeta = 0;
+  let headers: string[] = [];
+  let targetName = "";
+  let task: "regression" | "binary" = "regression";
+  const preview: string[][] = [];
+  const targetValues: string[] = [];
+  const rows: string[][] = [];
+
+  // Iterate lines without splitting the entire file into an array.
+  // (Browser-side uploads can be very large.)
+  let start = 0;
+  for (let i = 0; i <= text.length; i++) {
+    const isEnd = i === text.length;
+    const ch = text[i];
+    if (!isEnd && ch !== "\n" && ch !== "\r") continue;
+
+    // Handle \r\n as a single line break.
+    let end = i;
+    if (!isEnd && ch === "\r" && text[i + 1] === "\n") end = i;
+
+    const line = text.slice(start, end).trim();
+    start = i + 1;
+
+    if (!line) {
+      if (headerLine === null) continue;
+      // ignore empty rows
+      continue;
+    }
+
+    if (headerLine === null) {
+      headerLine = line;
+      headers = split(headerLine);
+      if (headers.length < 2) throw new Error("Dataset must have at least 2 columns (header + target).");
+      targetName = headers[headers.length - 1];
+      continue;
+    }
+
+    if (dataLinesProcessed >= maxRowsForMeta) break;
+
+    // We have a data row.
+    dataLinesProcessed++;
+    samplesForMeta++;
+
+    if (preview.length < previewRows) {
+      preview.push(split(line));
+    }
+
+    if (inferLinesProcessed < maxRowsForInference) {
+      const row = split(line);
+      rows.push(row);
+      const v = row[headers.length - 1] ?? "";
+      if (v) targetValues.push(v);
+      inferLinesProcessed++;
+    }
+  }
+
+  if (!headers || headers.length < 2 || samplesForMeta === 0) {
     throw new Error("Dataset must have a header row and at least one data row.");
   }
-  const targetName = headers[headers.length - 1];
-  const targetValues = rows.map((r) => r[headers.length - 1] ?? "").filter(Boolean);
-  const task = inferTask(targetValues);
+
+  task = inferTask(targetValues);
 
   const id = `upload:${Date.now()}`;
   const cleanName = filename.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
@@ -244,14 +331,14 @@ export function parseUploadedCSV(filename: string, text: string): ParsedDataset 
     id,
     name: cleanName || "Uploaded Dataset",
     task,
-    samples: rows.length,
+    samples: samplesForMeta,
     features: headers.length - 1,
     targetName,
-    description: `User-uploaded dataset. Target column "${targetName}" detected as ${task} task.`,
+    description: `User-uploaded dataset. Sampled up to ${samplesForMeta} rows for fast profiling. Target column "${targetName}" detected as ${task} task.`,
     uploaded: true,
   };
 
-  return { meta, headers, preview: rows.slice(0, 5) };
+  return { meta, headers, rows, preview };
 }
 
 // Recommended config based on dataset task + size
